@@ -9,6 +9,7 @@ build/
 .env.local
 server/data/
 client/dist/
+desktop/dist/
 coverage/
 .DS_Store
 *.log

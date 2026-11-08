@@ -53,6 +53,18 @@ function createApp() {
     console.warn('[app] Swagger docs disabled:', err.message);
   }
 
+  // Single-origin mode (desktop app / one-process deploy): serve the built
+  // web client and fall back to index.html for client-side routes.
+  if (env.serveClientDir && fs.existsSync(env.serveClientDir)) {
+    app.use(express.static(env.serveClientDir));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(env.serveClientDir, 'index.html'));
+    });
+    // eslint-disable-next-line no-console
+    console.log(`[app] serving web client from ${env.serveClientDir}`);
+  }
+
   app.use(notFound);
   app.use(errorHandler);
   return app;

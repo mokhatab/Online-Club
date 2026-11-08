@@ -1,0 +1,23 @@
+# Online Club API — systemd unit (Linux VPS).
+# Install:
+#   sudo cp online-club-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now online-club-api
+[Unit]
+Description=Online Club API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/online-club/server
+Environment=NODE_ENV=production
+Environment=PORT=4000
+Environment=DATABASE_PATH=/var/lib/online-club/online-club.db
+EnvironmentFile=/opt/online-club/.env
+ExecStart=/usr/bin/node /opt/online-club/server/src/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

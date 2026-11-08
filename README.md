@@ -41,6 +41,24 @@ cp .env.example .env
 docker compose up --build
 ```
 
+### Desktop app (Windows / macOS / Linux, works offline)
+
+```bash
+npm run install:desktop && npm run build && npm run desktop
+```
+
+Builds double-click installers (`.exe`, `.dmg`, `.AppImage`/`.deb`) — see
+[`docs/DESKTOP.md`](docs/DESKTOP.md).
+
+### Downloadable release (source + tests + deploy files)
+
+```bash
+npm run release   # → release/online-club-v1.0.0.{zip,tar.gz} + .sha256
+```
+
+Deploy directions (VPS, nginx, systemd, PM2): [`deploy/README.md`](deploy/README.md)
+and [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ## How the layers talk
 
 ```

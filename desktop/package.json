@@ -1,0 +1,57 @@
+{
+  "name": "@online-club/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online Club desktop app — Electron shell that runs the API + web client locally in one window.",
+  "main": "main.js",
+  "scripts": {
+    "test": "node boot.test.js",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.onlineclub.app",
+    "productName": "Online Club",
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../server",
+        "to": "server",
+        "filter": [
+          "**/*",
+          "!data",
+          "!data/**/*",
+          "!tests",
+          "!tests/**/*",
+          "!.env"
+        ]
+      },
+      {
+        "from": "../client/dist",
+        "to": "client"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    }
+  }
+}

@@ -21,6 +21,9 @@ const env = {
   seedOnBoot: String(process.env.SEED_ON_BOOT || 'true').toLowerCase() !== 'false',
   seedAdminEmail: process.env.SEED_ADMIN_EMAIL || 'admin@onlineclub.local',
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || 'Admin123!',
+  // When set, the API also serves the built web client (single-origin mode
+  // used by the desktop app and simple one-process deploys).
+  serveClientDir: process.env.SERVE_CLIENT_DIR || '',
 };
 
 if (env.nodeEnv === 'production' && env.jwtSecret.includes('change-me')) {
