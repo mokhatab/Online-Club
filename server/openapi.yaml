@@ -1,0 +1,360 @@
+openapi: 3.0.3
+info:
+  title: Online Club API
+  version: 1.0.0
+  description: >
+    Layered API for the Online Club (social/community club — events & bookings).
+    Layers: routes → controllers → services → repositories → SQLite.
+    Services talk to each other over an internal event bus; the marketing
+    module fans events out to connected toolkits (Mailchimp, Brevo, SendGrid,
+    GA4, Meta CAPI, TikTok, generic webhook URL) and exposes inbound receiver
+    URLs for those toolkits to call back.
+servers:
+  - url: http://localhost:4000/api/v1
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details: { type: array, items: { type: string } }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [member, admin] }
+        avatar_url: { type: string, nullable: true }
+        created_at: { type: string }
+        profile:
+          type: object
+          nullable: true
+          properties:
+            phone: { type: string }
+            city: { type: string }
+            interests: { type: array, items: { type: string } }
+            newsletter_opt_in: { type: boolean }
+            marketing_source: { type: string, nullable: true }
+    Event:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        category: { type: string }
+        location: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, nullable: true }
+        capacity: { type: integer }
+        booked_seats: { type: integer }
+        seats_left: { type: integer }
+        waitlisted_count: { type: integer }
+        price_cents: { type: integer }
+        currency: { type: string }
+        image_url: { type: string, nullable: true }
+        status: { type: string, enum: [draft, published, cancelled] }
+    Booking:
+      type: object
+      properties:
+        id: { type: integer }
+        event_id: { type: integer }
+        user_id: { type: integer }
+        seats: { type: integer }
+        status: { type: string, enum: [confirmed, waitlisted, cancelled] }
+        booked_at: { type: string }
+    Integration:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        direction: { type: string }
+        events: { type: array, items: { type: string } }
+        fields: { type: array, items: { type: object } }
+        enabled: { type: boolean }
+        config: { type: object }
+        inbound_url: { type: string }
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /auth/register:
+    post:
+      summary: Register a new member (emits member.registered)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                city: { type: string }
+                interests: { type: array, items: { type: string } }
+                newsletterOptIn: { type: boolean }
+                marketingSource: { type: string, nullable: true }
+      responses:
+        '201': { description: Created }
+        '409': { description: Email taken, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/login:
+    post:
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Bad credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/me:
+    get:
+      summary: Current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /members/stats:
+    get:
+      summary: Public counters for the landing page
+      responses:
+        '200': { description: OK }
+  /members:
+    get:
+      summary: List members (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /events:
+    get:
+      summary: List events
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, draft, published, cancelled] }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: upcomingOnly
+          schema: { type: boolean }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create event (admin, emits event.published)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, starts_at]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                category: { type: string }
+                location: { type: string }
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time, nullable: true }
+                capacity: { type: integer }
+                price_cents: { type: integer }
+                currency: { type: string }
+                status: { type: string, enum: [draft, published, cancelled] }
+      responses:
+        '201': { description: Created }
+  /events/categories:
+    get:
+      summary: Distinct event categories
+      responses:
+        '200': { description: OK }
+  /events/{slug}:
+    get:
+      summary: Get one event by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found }
+  /events/{id}:
+    patch:
+      summary: Update event (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete event (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /bookings:
+    post:
+      summary: Book seats (emits booking.created)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id]
+              properties:
+                event_id: { type: integer }
+                seats: { type: integer, default: 1 }
+      responses:
+        '201': { description: Created }
+  /bookings/mine:
+    get:
+      summary: My bookings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /bookings/event/{eventId}:
+    get:
+      summary: Bookings for one event (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /bookings/{id}/cancel:
+    post:
+      summary: Cancel a booking (emits booking.cancelled, promotes waitlist)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /marketing/public-config:
+    get:
+      summary: Secret-free tracking config for the web client
+      responses:
+        '200': { description: OK }
+  /marketing/inbound/{provider}:
+    post:
+      summary: Inbound receiver URL — paste this URL into your marketing toolkit
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                action: { type: string, example: unsubscribed }
+      responses:
+        '200': { description: Received }
+  /marketing/track:
+    post:
+      summary: Relay a tracking event to enabled providers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event]
+              properties:
+                event: { type: string }
+                payload: { type: object }
+      responses:
+        '200': { description: OK }
+  /marketing/integrations:
+    get:
+      summary: List integrations with masked secrets (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /marketing/integrations/{key}:
+    put:
+      summary: Enable/configure an integration (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                config: { type: object }
+      responses:
+        '200': { description: OK }
+  /marketing/integrations/{key}/test:
+    post:
+      summary: Send a test through an integration (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /marketing/logs:
+    get:
+      summary: Outbound delivery log (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /marketing/inbound:
+    get:
+      summary: Received inbound webhooks (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
